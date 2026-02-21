@@ -1,97 +1,75 @@
-import prisma from "../../../configs/database";
-import { existingEmail } from "../../../utils/existingUsers";
+import { userRepository } from "../repositories/userRepository";
 import { encryptPassword, comparePassword, isEmailValid } from "../../../utils/utils";
 import { getFile, uploadBase64 } from "../../../utils/s3";
 import { apiError } from "../../../utils/respons";
 import { jwtUtils } from "../../../utils/jwt";
 import { storeToken, deleteToken } from "../../../utils/tokenStore";
-import { v4 as uuidv4 } from "uuid";
 
 const folder = "profile";
 
 export const authService = {
 	async register(data: any) {
-		return await prisma.$transaction(async (tx) => {
-			if (!isEmailValid(data.email)) throw new apiError(400, "Invalid email");
-			const existing = await existingEmail(data.email);
-			if (existing) throw new apiError(400, "Email already exists");
+		if (!isEmailValid(data.email)) throw new apiError(400, "Invalid email");
 
-			let photoFileName: string | null = null;
-			if (data.photo) {
-				const uploadResult = await uploadBase64(folder, data.photo, 5, ["image/jpeg", "image/png", "image/jpg", "image/webp"]);
-				photoFileName = uploadResult.fileName;
-			}
+		const existing = await userRepository.findByEmail(data.email);
+		if (existing) throw new apiError(400, "Email already exists");
 
-			const user = await tx.user.create({
-				data: {
-					email: data.email,
-					password: await encryptPassword(data.password),
-					profile: {
-						create: {
-							name: data.name,
-							address: data.address,
-							phone: data.phone,
-							photo: photoFileName,
-						},
-					},
-				},
-				include: {
-					profile: true,
-				},
-			});
+		let photoFileName: string | null = null;
+		if (data.photo) {
+			const uploadResult = await uploadBase64(folder, data.photo, 5, ["image/jpeg", "image/png", "image/jpg", "image/webp"]);
+			photoFileName = uploadResult.fileName;
+		}
 
-			const accessToken = jwtUtils.generateAccessToken({ id: user.id, email: user.email });
-			const refreshToken = jwtUtils.generateRefreshToken({ id: user.id, email: user.email });
+		const user = await userRepository.createWithProfile(
+			{
+				email: data.email,
+				password: await encryptPassword(data.password),
+			},
+			{
+				name: data.name,
+				address: data.address,
+				phone: data.phone,
+				photo: photoFileName,
+			},
+		);
 
-			await storeToken(user.id, accessToken, "access", 24 * 60 * 60);
-			await storeToken(user.id, refreshToken, "refresh", 7 * 24 * 60 * 60);
+		const accessToken = jwtUtils.generateAccessToken({ id: user.id, email: user.email });
+		const refreshToken = jwtUtils.generateRefreshToken({ id: user.id, email: user.email });
 
-			await tx.refreshToken.create({
-				data: {
-					id: uuidv4(),
-					userId: user.id,
-					token: refreshToken,
-				},
-			});
+		await storeToken(user.id, accessToken, "access", 24 * 60 * 60);
+		await storeToken(user.id, refreshToken, "refresh", 7 * 24 * 60 * 60);
 
-			return {
-				user: {
-					id: user.id,
-					name: user.profile?.name || null,
-					email: user.email,
-				},
-				accessToken,
-				refreshToken,
-			};
-		});
+		await userRepository.createRefreshToken(user.id, refreshToken);
+
+		return {
+			user: {
+				id: user.id,
+				name: user.profile?.name || null,
+				email: user.email,
+			},
+			accessToken,
+			refreshToken,
+		};
 	},
 
 	async login(email: string, password: string) {
 		if (!isEmailValid(email)) throw new apiError(400, "Invalid email");
-		const user = await prisma.user.findUnique({
-			where: { email },
-			include: { profile: true },
-		});
+
+		const user = await userRepository.findByEmail(email);
 		if (!user) throw new apiError(400, "User not found");
 
 		const isValid = await comparePassword(password, user.password!);
 		if (!isValid) throw new apiError(400, "Invalid password");
 
-		await prisma.refreshToken.deleteMany({ where: { userId: user.id } });
+		// Clean up existing tokens
+		await userRepository.deleteTokens(user.id);
 		await deleteToken(user.id, "access");
 		await deleteToken(user.id, "refresh");
 
 		const accessToken = jwtUtils.generateAccessToken({ id: user.id, email: user.email });
 		const refreshToken = jwtUtils.generateRefreshToken({ id: user.id, email: user.email });
 
-		await prisma.refreshToken.create({
-			data: {
-				id: uuidv4(),
-				userId: user.id,
-				token: refreshToken,
-			},
-		});
-
+		await userRepository.createRefreshToken(user.id, refreshToken);
 		await storeToken(user.id, accessToken, "access", 24 * 60 * 60);
 		await storeToken(user.id, refreshToken, "refresh", 7 * 24 * 60 * 60);
 
@@ -110,8 +88,8 @@ export const authService = {
 	},
 
 	async logout(userId: string) {
-		await prisma.refreshToken.deleteMany({ where: { userId } });
+		await userRepository.deleteTokens(userId);
 		await deleteToken(userId, "access");
 		await deleteToken(userId, "refresh");
-	}
+	},
 };

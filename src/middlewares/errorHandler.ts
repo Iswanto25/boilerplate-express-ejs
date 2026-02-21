@@ -17,7 +17,7 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
 		return res.status(statusCode).render("error", {
 			message: err.message || "Internal server error",
 			error: process.env.NODE_ENV === "development" ? err : {},
-			status: statusCode
+			status: statusCode,
 		});
 	}
 
@@ -26,12 +26,12 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
 
 export const notFoundHandler = (req: Request, res: Response, next: NextFunction) => {
 	const message = `Route ${req.method} ${req.path} not found`;
-	
+
 	if (req.accepts("html") && !req.path.startsWith("/api/")) {
 		return res.status(HttpStatus.NOT_FOUND).render("error", {
 			message,
 			error: {},
-			status: HttpStatus.NOT_FOUND
+			status: HttpStatus.NOT_FOUND,
 		});
 	}
 

@@ -38,9 +38,9 @@ export const authenticate = {
 			return respons.error("Unauthorized", null, HttpStatus.UNAUTHORIZED, res, req);
 		}
 
-		const existingUser = await prisma.user.findUnique({ 
+		const existingUser = await prisma.user.findUnique({
 			where: { id: result.userId },
-			include: { profile: true }
+			include: { profile: true },
 		});
 
 		if (!existingUser || !existingUser.isActive) {

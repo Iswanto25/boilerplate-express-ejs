@@ -5,11 +5,17 @@ import pinoHttp from "pino-http";
 import helmet from "helmet";
 import path from "path";
 import cookieParser from "cookie-parser";
+import session from "express-session";
+import flash from "connect-flash";
+import expressLayouts from "express-ejs-layouts";
+import { RedisStore } from "connect-redis";
+import { doubleCsrf } from "csrf-csrf";
 
 import { logger } from "../utils/logger";
 import { respons, HttpStatus } from "../utils/respons";
 import { errorHandler, notFoundHandler } from "../middlewares/errorHandler";
-// Import routes later
+import { redisClient } from "./redis";
+import { env } from "./env";
 import routes from "../routes";
 
 export const app = express();
@@ -18,11 +24,18 @@ export const app = express();
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "../../views"));
 
+// EJS Layouts configuration
+app.use(expressLayouts);
+app.set("layout", "layouts/main");
+app.set("layout extractScripts", true);
+app.set("layout extractStyles", true);
+
 // Declare module for request user
 declare module "express-serve-static-core" {
 	interface Request {
 		user?: any;
 		startTime?: number;
+		csrfToken?: (overwrite?: boolean, validateOnReuse?: boolean) => string;
 	}
 }
 
@@ -63,32 +76,56 @@ app.use(
 	}),
 );
 
-app.use((req, res, next) => {
-	res.setHeader("X-XSS-Protection", "0");
-	res.setHeader(
-		"Permissions-Policy",
-		"camera=(), geolocation=(), microphone=(), fullscreen=(self), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()",
-	);
-	next();
+// Session configuration with Redis
+const redisStore = new RedisStore({
+	client: redisClient!,
+	prefix: "sess:",
 });
 
-const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",").map((origin) => origin.trim()) : "*";
+app.use(
+	session({
+		store: redisStore,
+		secret: env.SESSION_SECRET,
+		resave: false,
+		saveUninitialized: false,
+		cookie: {
+			secure: env.NODE_ENV === "production",
+			httpOnly: true,
+			maxAge: 24 * 60 * 60 * 1000, // 24 hours
+		},
+	}),
+);
 
-const corsOptions: CorsOptions = {
-	origin: allowedOrigins === "*" ? "*" : allowedOrigins,
-	methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
-	preflightContinue: false,
-	optionsSuccessStatus: 204,
-	credentials: allowedOrigins !== "*",
-};
-
-app.use(cors(corsOptions));
-app.disable("x-powered-by");
-app.set("trust proxy", 1);
-app.use(compression());
-app.use(cookieParser());
+app.use(flash());
+app.use(cookieParser(env.SESSION_SECRET));
 app.use(express.json({ limit: "100mb" }));
 app.use(express.urlencoded({ extended: true, limit: "100mb" }));
+app.use(compression());
+app.use(cors()); // Standard CORS
+
+// CSRF Protection configuration
+export const { generateToken, doubleCsrfProtection, invalidCsrfTokenError } = doubleCsrf({
+	getSecret: (req) => env.SESSION_SECRET,
+	cookieName: "x-csrf-token",
+	cookieOptions: {
+		secure: env.NODE_ENV === "production",
+		sameSite: "lax",
+		path: "/",
+	},
+	size: 64,
+	ignoredMethods: ["GET", "HEAD", "OPTIONS"],
+});
+
+// Global View Middleware
+app.use((req, res, next) => {
+	res.locals.user = (req as any).user || null;
+	res.locals.messages = req.flash();
+	// Make CSRF token available in all views
+	if (typeof generateToken === "function") {
+		res.locals.csrfToken = generateToken(req, res);
+	}
+	next();
+});
 
 // Static files
 app.use(express.static(path.join(__dirname, "../../public")));
@@ -102,26 +139,13 @@ app.use((req, res, next) => {
 app.use(
 	pinoHttp({
 		logger,
-		autoLogging: process.env.NODE_ENV === "development" ? false : false,
+		autoLogging: false,
 		customSuccessMessage: (req, res, responseTime) => {
 			return `${req.method} ${req.url} ${res.statusCode} - ${responseTime}ms`;
-		},
-		customErrorMessage: (req, res, err) => {
-			return `${req.method} ${req.url} ${res.statusCode} - ERROR: ${err.message}`;
 		},
 		quietReqLogger: true,
 	}),
 );
-
-// Health check
-app.get("/health", (req, res) => {
-	const data = {
-		status: "ok",
-		timestamp: new Date().toISOString(),
-		environment: process.env.NODE_ENV || "development",
-	};
-	return respons.success("Service is healthy", data, HttpStatus.OK, res, req);
-});
 
 // Routes
 app.use("/", routes);
