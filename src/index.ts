@@ -1,21 +1,38 @@
-import express from "express";
-import path from "path";
+import { app } from "./configs/express";
+import http from "http";
+import dotenv from "dotenv";
+dotenv.config({ quiet: process.env.NODE_ENV === "production" });
 
-const app = express();
-const port = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3004;
+const HOST = process.env.HOST || "0.0.0.0";
+const NODE_ENV = process.env.NODE_ENV || "development";
+const isProd = NODE_ENV === "production";
+const server = http.createServer(app);
 
-app.set("view engine", "ejs");
-app.set("views", path.join(__dirname, "../views"));
-app.use(express.static(path.join(__dirname, "../public")));
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;
 
-app.get("/", (req, res) => {
-	res.render("index", { title: "Hello from TypeScript + EJS!" });
+if (isProd) {
+	console.info("Running in PRODUCTION mode");
+} else {
+	console.info("Running in DEVELOPMENT mode");
+}
+
+server.listen(PORT, HOST, () => {
+	const baseUrl = isProd ? process.env.BASE_URL || `https://${process.env.DOMAIN || "yourdomain.com"}` : `http://${HOST}:${PORT}`;
+
+	console.info("========================================");
+	console.info(`Server is running`);
+	console.info(`Version: ${process.env.version || "1.0.0"}`);
+	console.info(`Environment: ${NODE_ENV}`);
+	console.info(`URL: ${baseUrl}`);
+	console.info("========================================");
 });
 
-app.get("/send", (req, res) => {
-	res.send("Hello from the /send route!");
-});
-
-app.listen(port, () => {
-	console.log(`Server listening on http://localhost:${port}`);
+process.on("SIGTERM", () => {
+	console.info("SIGTERM signal received: closing HTTP server");
+	server.close(() => {
+		console.info("HTTP server closed gracefully");
+		process.exit(0);
+	});
 });
