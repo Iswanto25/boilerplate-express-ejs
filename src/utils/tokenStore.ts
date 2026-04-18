@@ -1,5 +1,5 @@
-import { redisClient, isRedisAvailable } from "../configs/redis";
-import { logger } from "./logger";
+import { redisClient, isRedisAvailable } from "@/configs/redis.js";
+import { logger } from "@/utils/logger.js";
 
 const ACCESS_TOKEN_PREFIX = "access_token:";
 const REFRESH_TOKEN_PREFIX = "refresh_token:";

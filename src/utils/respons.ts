@@ -1,7 +1,7 @@
 import { Response, Request } from "express";
-import prisma from "../configs/database";
-import { authenticate } from "../middlewares/authMiddleware";
-import { logger } from "./logger";
+import prisma from "@/configs/database.js";
+import { authenticate } from "@/middlewares/auth.middleware.js";
+import { logger } from "@/utils/logger.js";
 import moment from "moment";
 moment.locale("id");
 

@@ -1,14 +1,11 @@
 import { Router } from "express";
-import { indexController } from "../features/home/controllers/indexController";
-import { authenticate } from "../middlewares/authMiddleware";
-import authRoutes from "./authRoutes";
+import authRoutes from "@/features/auth/auth.routes.js";
+import homeRoutes from "@/features/home/home.routes.js";
 
 const router = Router();
 
-// Modular Auth Routes
+// Modular Routes dari Features
 router.use("/", authRoutes);
-
-// Protected Home Route
-router.get("/", authenticate.verifyToken, indexController.home);
+router.use("/", homeRoutes);
 
 export default router;

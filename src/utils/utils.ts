@@ -1,6 +1,6 @@
 import moment from "moment";
 import { customAlphabet } from "nanoid";
-import bcrypt from "bcryptjs";
+import bcrypt from "bcrypt";
 import crypto from "crypto";
 
 const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";

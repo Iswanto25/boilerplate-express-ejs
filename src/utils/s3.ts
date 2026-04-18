@@ -4,15 +4,12 @@ import {
 	GetObjectCommand,
 	DeleteObjectCommand,
 	HeadObjectCommand,
-	DeleteObjectsCommand,
-	ListObjectsV2Command,
-	_Object,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import fs from "fs";
 import path from "path";
 import dotenv from "dotenv";
-import { randomString } from "./utils";
+import { randomString } from "@/utils/utils.js";
 dotenv.config({ quiet: process.env.NODE_ENV === "production" });
 
 function normalizeEndpoint(raw?: string, useSSL?: boolean): string | null {
@@ -115,8 +112,6 @@ export async function uploadFile(file: Express.Multer.File, folder: string) {
 
 export async function uploadBase64(folder: string, file: string, maxSizeInMB: number = 10, allowedFormats?: string[]) {
 	if (!s3) throwS3NotConfigured();
-
-	const totalStartTime = Date.now();
 
 	if (typeof file !== "string") {
 		throw {

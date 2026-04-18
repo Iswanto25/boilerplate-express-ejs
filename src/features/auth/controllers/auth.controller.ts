@@ -1,8 +1,7 @@
 import { Request, Response } from "express";
-import { authService } from "../services/authService";
-import { HttpStatus, respons } from "../../../utils/respons";
-import { registerSchema, loginSchema } from "../schemas/authSchema";
-import { ZodError } from "zod";
+import { authServices } from "@/features/auth/services/auth.service.js";
+import { HttpStatus, respons } from "@/utils/respons.js";
+import { authValidation } from "@/features/auth/validations/auth.validation.js";
 
 export const authController = {
 	renderLogin: (req: Request, res: Response) => {
@@ -15,10 +14,18 @@ export const authController = {
 
 	register: async (req: Request, res: Response) => {
 		try {
-			// Zod Validation
-			const validatedData = registerSchema.parse(req.body);
+			const validation = authValidation.register.safeParse(req.body);
 
-			const result = await authService.register(validatedData);
+			if (!validation.success) {
+				const errorMsg = validation.error.issues[0]?.message || "Data tidak valid";
+				if (req.accepts("html") && !req.path.startsWith("/api/")) {
+					req.flash("error", errorMsg);
+					return res.render("register", { title: "Register", data: req.body });
+				}
+				return respons.error(errorMsg, errorMsg, HttpStatus.BAD_REQUEST, res, req);
+			}
+
+			const result = await authServices.register(validation.data);
 
 			if (req.accepts("html") && !req.path.startsWith("/api/")) {
 				req.flash("success", "Registrasi berhasil! Silakan login.");
@@ -27,29 +34,33 @@ export const authController = {
 
 			return respons.success("Registration successful", result, HttpStatus.OK, res, req);
 		} catch (error: any) {
-			let message = "Something went wrong";
-
-			if (error instanceof ZodError) {
-				message = error.errors[0].message;
-			} else {
-				message = error.message || message;
-			}
+			const err = error as { statusCode?: number; message?: string };
+			const statusCode = err.statusCode || HttpStatus.INTERNAL_SERVER_ERROR;
+			const message = err.message || "Something went wrong";
 
 			if (req.accepts("html") && !req.path.startsWith("/api/")) {
 				req.flash("error", message);
 				return res.render("register", { title: "Register", data: req.body });
 			}
 
-			return respons.error(message, null, HttpStatus.BAD_REQUEST, res, req);
+			return respons.error(message, message, statusCode, res, req);
 		}
 	},
 
 	login: async (req: Request, res: Response) => {
 		try {
-			// Zod Validation
-			const validatedData = loginSchema.parse(req.body);
+			const validation = authValidation.login.safeParse(req.body);
 
-			const result = await authService.login(validatedData.email, validatedData.password);
+			if (!validation.success) {
+				const errorMsg = validation.error.issues[0]?.message || "Data tidak valid";
+				if (req.accepts("html") && !req.path.startsWith("/api/")) {
+					req.flash("error", errorMsg);
+					return res.render("login", { title: "Login", email: req.body.email });
+				}
+				return respons.error(errorMsg, errorMsg, HttpStatus.BAD_REQUEST, res, req);
+			}
+
+			const result = await authServices.login(validation.data.email, validation.data.password);
 
 			// Store tokens in cookies
 			res.cookie("accessToken", result.accessToken, {
@@ -68,27 +79,23 @@ export const authController = {
 
 			return respons.success("Login successful", result, HttpStatus.OK, res, req);
 		} catch (error: any) {
-			let message = "Something went wrong";
-
-			if (error instanceof ZodError) {
-				message = error.errors[0].message;
-			} else {
-				message = error.message || message;
-			}
+			const err = error as { statusCode?: number; message?: string };
+			const statusCode = err.statusCode || HttpStatus.INTERNAL_SERVER_ERROR;
+			const message = err.message || "Something went wrong";
 
 			if (req.accepts("html") && !req.path.startsWith("/api/")) {
 				req.flash("error", message);
 				return res.render("login", { title: "Login", email: req.body.email });
 			}
 
-			return respons.error(message, null, HttpStatus.BAD_REQUEST, res, req);
+			return respons.error(message, message, statusCode, res, req);
 		}
 	},
 
 	logout: async (req: Request, res: Response) => {
 		try {
 			if (req.user) {
-				await authService.logout(req.user.id);
+				await authServices.logout(req.user.id);
 			}
 			res.clearCookie("accessToken");
 			res.clearCookie("refreshToken");

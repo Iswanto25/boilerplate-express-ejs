@@ -1,5 +1,5 @@
-import Redis from "ioredis";
-import { logger } from "../utils/logger";
+import { Redis } from "ioredis";
+import { logger } from "@/utils/logger.js";
 
 let redisClient: Redis | null = null;
 let isRedisAvailable = false;
@@ -14,7 +14,7 @@ if (hasRedisConfig) {
 			password: process.env.REDIS_PASSWORD || undefined,
 			db: Number(process.env.REDIS_DB) || 0,
 			connectTimeout: 10_000,
-			retryStrategy: (times) => {
+			retryStrategy: (times: number) => {
 				if (times > 3) {
 					logger.warn("⚠️  Redis connection failed after 3 retries. Running without Redis.");
 					isRedisAvailable = false;
@@ -36,7 +36,7 @@ if (hasRedisConfig) {
 			logger.info("✅ Redis ready for commands");
 		});
 
-		redisClient.on("error", (err) => {
+		redisClient.on("error", (err: any) => {
 			isRedisAvailable = false;
 			logger.warn({ err }, "⚠️  Redis connection error - running without Redis");
 		});
@@ -45,7 +45,7 @@ if (hasRedisConfig) {
 			logger.warn("⚠️  Redis reconnecting...");
 		});
 
-		redisClient.connect().catch((err) => {
+		redisClient.connect().catch((err: any) => {
 			isRedisAvailable = false;
 			logger.warn("⚠️  Redis not available - running without Redis cache");
 		});

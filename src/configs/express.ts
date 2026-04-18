@@ -1,9 +1,10 @@
-import express from "express";
-import cors, { CorsOptions } from "cors";
+import express, { Request, Response } from "express";
+import cors from "cors";
 import compression from "compression";
-import pinoHttp from "pino-http";
+import { pinoHttp } from "pino-http";
 import helmet from "helmet";
 import path from "path";
+import { fileURLToPath } from "url";
 import cookieParser from "cookie-parser";
 import session from "express-session";
 import flash from "connect-flash";
@@ -11,18 +12,20 @@ import expressLayouts from "express-ejs-layouts";
 import { RedisStore } from "connect-redis";
 import { doubleCsrf } from "csrf-csrf";
 
-import { logger } from "../utils/logger";
-import { respons, HttpStatus } from "../utils/respons";
-import { errorHandler, notFoundHandler } from "../middlewares/errorHandler";
-import { redisClient } from "./redis";
-import { env } from "./env";
-import routes from "../routes";
+import { logger } from "@/utils/logger.js";
+import { errorHandler, notFoundHandler } from "@/middlewares/error.handler.js";
+import { redisClient } from "@/configs/redis.js";
+import { env } from "@/configs/env.js";
+import routes from "@/routes/index.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export const app = express();
 
 // Set view engine
 app.set("view engine", "ejs");
-app.set("views", path.join(__dirname, "../../views"));
+app.set("views", path.join(__dirname, "../../../views"));
 
 // EJS Layouts configuration
 app.use(expressLayouts);
@@ -128,7 +131,7 @@ app.use((req, res, next) => {
 });
 
 // Static files
-app.use(express.static(path.join(__dirname, "../../public")));
+app.use(express.static(path.join(__dirname, "../../../public")));
 
 // Response time tracking
 app.use((req, res, next) => {
@@ -140,7 +143,7 @@ app.use(
 	pinoHttp({
 		logger,
 		autoLogging: false,
-		customSuccessMessage: (req, res, responseTime) => {
+		customSuccessMessage: (req: Request, res: Response, responseTime: number) => {
 			return `${req.method} ${req.url} ${res.statusCode} - ${responseTime}ms`;
 		},
 		quietReqLogger: true,
